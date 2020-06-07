@@ -5,8 +5,9 @@ orbs:
 
 jobs:
   build:
+    working_directory: ~/react-native-simple/android
     executor: android/android
-        
+    
     steps:
       - checkout
       - run:
