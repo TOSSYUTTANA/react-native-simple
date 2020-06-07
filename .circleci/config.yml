@@ -1,42 +1,68 @@
-# Java Gradle CircleCI 2.0 configuration file
-#
-# Check https://circleci.com/docs/2.0/language-java/ for more details
-#
-version: 2
+version: 2.1
 jobs:
   build:
+    working_directory: ~/react-native-simple
     docker:
-      # specify the version you desire here
-      - image: circleci/openjdk:8-jdk
-
-      # Specify service dependencies here if necessary
-      # CircleCI maintains a library of pre-built images
-      # documented at https://circleci.com/docs/2.0/circleci-images/
-      # - image: circleci/postgres:9.4
-
-    working_directory: ~/repo
-
-    environment:
-      # Customize the JVM maximum heap limit
-      JVM_OPTS: -Xmx3200m
-      TERM: dumb
-
+      - image: circleci/node:12
     steps:
       - checkout
-
-      # Download and cache dependencies
-      - restore_cache:
-          keys:
-            - v1-dependencies-{{ checksum "build.gradle" }}
-            # fallback to using the latest cache if no exact match is found
-            - v1-dependencies-
-
-      - run: gradle dependencies
-
-      - save_cache:
+      - run: yarn
+      - run: yarn run test
+      - persist_to_workspace:
+          root: ~/react-native-simple
           paths:
-            - ~/.gradle
-          key: v1-dependencies-{{ checksum "build.gradle" }}
+            - node_modules
+      - store_test_results:
+          path: ~/react-native-simple/junit.xml
 
-      # run tests!
-      - run: gradle test
+  android:
+    working_directory: ~/react-native-simple/android
+    docker:
+      - image: circleci/android:api-27-node8-alpha
+    steps:
+      - checkout:
+          path: ~/react-native-simple
+      - attach_workspace:
+          at: ~/react-native-simple
+      - run: bundle install
+      - run: bundle exec fastlane test
+      - store_test_results:
+          path: ~/react-native-simple/android/reports
+
+  ios:
+    macos:
+      xcode: "11.0"
+    working_directory: /Users/distiller/react-native-simple/ios
+    environment:
+      FL_OUTPUT_DIR: /Users/distiller/project/output
+    shell: /bin/bash --login -o pipefail
+    steps:
+      - checkout:
+          path: /Users/distiller/react-native-simple
+      - run:
+          name: Set Ruby Version
+          command:  echo "ruby-2.4" > ~/.ruby-version
+      # Not using a workspace here as Node and Yarn versions
+      # differ between the macOS image and the Docker containers above.
+      - run: yarn
+      - run: bundle install
+      - run: bundle exec fastlane test
+      - run:
+          command: cp $FL_OUTPUT_DIR/scan/report.junit $FL_OUTPUT_DIR/scan/results.xml
+          when: always
+      - store_artifacts:
+          path: /Users/distiller/react-native-simple/output
+      - store_test_results:
+          path: /Users/distiller/react-native-simple/output/scan
+
+workflows:
+  version: 2
+  node-android-ios:
+    jobs:
+      - build
+      - android:
+          requires:
+            - build
+      - ios:
+          requires:
+            - build
